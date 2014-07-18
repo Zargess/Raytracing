@@ -257,61 +257,6 @@
 <member name="">
 
 </member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="">
-
-</member>
-<member name="M:Program.pointAtTime(Program.Ray,System.Double)">
-<summary>
- Get the position of a ray at a given time
-</summary>
-</member>
-<member name="M:Program.norm(System.Windows.Media.Media3D.Vector3D)">
-<summary>
- Get the unit vector of a given vector
-</summary>
-</member>
 <member name="T:Program">
 
 </member>

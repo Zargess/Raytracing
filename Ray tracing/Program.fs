@@ -22,14 +22,14 @@ type Color(r: float, g: float, b: float) =
         Color(r,g,b)
     static member Zero = Color(0.0, 0.0, 0.0)
 
-
-type Sphere = { center:Point3D; radius:float; diffuseColor:Color }
-type Triangle = { a:Point3D; b:Point3D; c:Point3D; v1:Vector3D; v2:Vector3D; v3:Vector3D }
+type Shape =
+    | Sphere  of center:Point3D * radius:float * diffuseColor:Color
+    | Triangle of a:Point3D * b:Point3D * c:Point3D * v1:Vector3D * v2:Vector3D * v3:Vector3D * diffuseColor:Color
 type Light = { position:Point3D; color:Color }
 type Camera = { position:Point3D; lookAt:Point3D; lookUp:Vector3D }
-type Scene = { camera:Camera; sphere:Sphere; ambientLight:Color; light:Light }
+type Scene = { camera:Camera; shapes:list<Shape>; ambientLight:Color; light:Light }
 type Ray = { origin:Point3D; direction:Vector3D }
-type Intersection = { normal:Vector3D; point:Point3D; ray:Ray; sphere:Sphere; t:float }
+type Intersection = { normal:Vector3D; point:Point3D; ray:Ray; shape:Shape; t:float; color:Color }
 
 let norm (v:Vector3D) =
     let abs = sqrt (v.X * v.X + v.Y * v.Y + v.Z * v.Z)
@@ -38,11 +38,11 @@ let norm (v:Vector3D) =
 let cramersDet v1 v2 v3 =
     Vector3D.DotProduct(Vector3D.CrossProduct(v1, v2), v3)
 
-let cramers triangle ray =
-    let A1 = triangle.a - triangle.b
-    let A2 = triangle.a - triangle.c
+let cramers a b c ray =
+    let A1 = a - b
+    let A2 = a - c
     let A3 = ray.direction
-    let A4 = triangle.a - ray.origin
+    let A4 = a - ray.origin
     let detA = cramersDet A1 A2 A3
     let det1 = cramersDet A4 A2 A3
     let det2 = cramersDet A1 A4 A3
@@ -50,28 +50,35 @@ let cramers triangle ray =
     let beta = det1 / detA
     let y = det2 /detA
     let t = det3 / detA
-    let a = 1.0 - beta - y
-    (a,beta,y,t)
+    let alpha = 1.0 - beta - y
+    (alpha,beta,y,t)
 
 let pointAtTime ray time =
     ray.origin + time * ray.direction
 
-let castRay ray (scene : Scene) = 
-    let s = ray.origin - scene.sphere.center
-    let rayDir = norm ray.direction
-    let sv = Vector3D.DotProduct(s, rayDir)
-    let ss = Vector3D.DotProduct(s,s)
-    let discr = sv*sv - ss + scene.sphere.radius * scene.sphere.radius
-    if discr < 0.0 then []
-    else 
-        let normalAtTime t = norm (scene.sphere.center - pointAtTime ray t)
-        let (t1,t2) = (-sv + sqrt(discr), -sv - sqrt(discr))
-        [ { normal = normalAtTime t1; point = pointAtTime ray t1; ray = ray; sphere=scene.sphere; t = t1 };
-          { normal = normalAtTime t2; point = pointAtTime ray t2; ray = ray; sphere=scene.sphere; t = t2 } ]
+let intersection shape ray = 
+    match shape with
+        | Sphere (center, radius, diffuseColor) ->
+            let s = ray.origin - center
+            let rayDir = norm ray.direction
+            let sv = Vector3D.DotProduct(s, rayDir)
+            let ss = Vector3D.DotProduct(s,s)
+            let discr = sv*sv - ss + radius * radius
+            if discr < 0.0 then []
+            else
+                let normalAtTime t = norm ((pointAtTime ray t) - center)
+                let (t1,t2) = (-sv + sqrt(discr), -sv - sqrt(discr))
+                [ { normal = normalAtTime t1; point = pointAtTime ray t1; ray = ray; shape=shape; t = t1; color=diffuseColor };
+                  { normal = normalAtTime t2; point = pointAtTime ray t2; ray = ray; shape=shape; t = t2; color=diffuseColor } ]
+        | Triangle(a,b,c,v1,v2,v3,color) ->
+            let (alpha,beta,y,t) = cramers a b c ray
+            let n = alpha * v1 + beta * v2 + y * v3
+            let p = pointAtTime ray t
+            [ { normal = n; point = p; ray = ray; shape = shape; t = t; color=color } ]
 
 let colorAt intersections scene =
-    let closest = List.maxBy(fun i -> i.t) intersections
-    let kd = closest.sphere.diffuseColor
+    let closest = List.minBy(fun i -> i.t) intersections
+    let kd = closest.color
     let Ia = scene.ambientLight
     let L = norm (scene.light.position - closest.point)
     let Id = Math.Max(0.0, Vector3D.DotProduct(L, closest.normal))
@@ -99,14 +106,14 @@ do
     let bmp = new Bitmap(width, height)
 
     // Sphere
-    let sphere = { center = Point3D(1.0, 1.0, 1.0); radius = 0.4; diffuseColor = Color(1.0, 0.1, 0.1) }
+    let sphere = Sphere(Point3D(1.0, 1.0, 1.0), 0.4, Color(1.0, 0.1, 0.1))
 
     // Camera
     let camera = { position = Point3D(0.0, 0.0, 0.0); lookAt = Point3D(1.0, 1.0, 1.0); lookUp = Vector3D(0.0, 1.0, 0.0) }
 
     // Scene
     let light = { position=Point3D(0.0,0.0,-5.0); color=Color(0.8,0.8,0.8) }
-    let scene = { camera = camera; sphere = sphere; ambientLight = Color(0.2, 0.2, 0.2); light = light }
+    let scene = { camera = camera; shapes = [sphere]; ambientLight = Color(0.2, 0.2, 0.2); light = light }
 
     // Set up the coordinate system
     let n = norm (camera.position - camera.lookAt)
@@ -119,7 +126,7 @@ do
             let rayPoint = vpc + float(x-width/2)*pw*u + float(y-height/2)*ph*v
             let rayDir = norm (rayPoint - scene.camera.position)
             let ray = { origin = scene.camera.position; direction = rayDir }
-            let intersects = castRay ray scene
+            let intersects = List.collect (fun x -> x) (List.map (fun x -> intersection x ray) scene.shapes)
             match intersects with
             | [] -> bmp.SetPixel(x, y, Color.Gray)
             | _ -> let color = colorAt intersects scene
