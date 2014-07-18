@@ -16,11 +16,16 @@ type Color(r: float, g: float, b: float) =
     static member ( * ) (c: Color, s: float) = 
         Color (c.r * s, c.g * s, c.b * s)
     static member ( + ) (c1: Color, c2: Color) = 
-        let r = Math.Min (c1.r + c2.r, 1.0)
-        let g = Math.Min (c1.g + c2.g, 1.0)
-        let b = Math.Min (c1.b + c2.b, 1.0)
+        let r = c1.r + c2.r
+        let g = c1.g + c2.g
+        let b = c1.b + c2.b
         Color(r,g,b)
     static member Zero = Color(0.0, 0.0, 0.0)
+     member this.clip = 
+        let r1 = min 1.0 r
+        let g1 = min 1.0 g
+        let b1 = min 1.0 b
+        Color(r1,g1,b1)
 
 type Shape =
     | Sphere  of center:Vector3D * radius:float * diffuseColor:Color
@@ -146,7 +151,7 @@ do
     let camera = { position = Vector3D(-5.0, 0.0, 0.0); lookAt = Vector3D(1.0, 1.0, 1.0); lookUp = Vector3D(0.0, 1.0, 0.0) }
 
     // Scene
-    let sun = Sphere(Vector3D(0.0,0.0,-5.0), 0.5, diffuseColor=Color(0.2,0.2,1.0))
+    let sun = Sphere(Vector3D(0.0,0.0,-5.0), 0.5, diffuseColor=Color(1.0,1.0,1.0))
     let light : Light = { shape=sun; color=Color(0.8,0.8,0.8) }
     let scene = { camera = camera; shapes = [sphere; sphere2; sphere3]; ambientLight = Color(0.2, 0.2, 0.2); light = light }
 
@@ -159,14 +164,18 @@ do
     let rand = Random()
 
     for x in 0..(width - 1) do
-        for y in 0..(height - 1) do 
-            let rayPoint = vpc + float(x-width/2)*pw*u + float(y-height/2)*ph*v
-            let rayDir = norm (rayPoint - scene.camera.position)
-            let ray = { origin = scene.camera.position; direction = rayDir }
-            let intersects = raytrace ray scene 0.01 100.0
-            match intersects with
-            | [] -> bmp.SetPixel(x, y, Color.Gray)
-            | _ -> let color = colorAt intersects scene rand
-                   bmp.SetPixel(x,y, Color.FromArgb(255, (int)(color.r*255.0), (int)(color.g*255.0), (int)(color.b*255.0)))
+        for y in 0..(height - 1) do
+            let colors = seq { 
+                            for i in 0..15 do
+                                let rayPoint = vpc + float(x-width/2)*pw*u + float(y-height/2)*ph*v
+                                let rayDir = norm (rayPoint - scene.camera.position)
+                                let ray = { origin = scene.camera.position; direction = rayDir }
+                                let intersects = raytrace ray scene 0.01 100.0
+                                yield  match intersects with
+                                    | [] -> Color.Zero
+                                    | _ ->  colorAt intersects scene rand                           
+                              }
+            let color = ((Seq.fold (fun a b -> a + b) Color.Zero colors) * (1.0 / 16.0)).clip
+            bmp.SetPixel(x,y, Color.FromArgb(255, (int)(color.r*255.0), (int)(color.g*255.0), (int)(color.b*255.0)))
 
     bmp.Save(@"c:\users\mfh\desktop\output1.jpg")
