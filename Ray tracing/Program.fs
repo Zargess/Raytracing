@@ -23,13 +23,16 @@ type Color(r: float, g: float, b: float) =
     static member Zero = Color(0.0, 0.0, 0.0)
 
 type Shape =
-    | Sphere  of center:Point3D * radius:float * diffuseColor:Color
-    | Triangle of a:Point3D * b:Point3D * c:Point3D * v1:Vector3D * v2:Vector3D * v3:Vector3D * diffuseColor:Color
-type Light = { position:Point3D; color:Color }
-type Camera = { position:Point3D; lookAt:Point3D; lookUp:Vector3D }
+    | Sphere  of center:Vector3D * radius:float * diffuseColor:Color
+    | Triangle of a:Vector3D * b:Vector3D * c:Vector3D * v1:Vector3D * v2:Vector3D * v3:Vector3D * diffuseColor:Color
+type Light = { shape:Shape; color:Color }
+type Camera = { position:Vector3D; lookAt:Vector3D; lookUp:Vector3D }
 type Scene = { camera:Camera; shapes:list<Shape>; ambientLight:Color; light:Light }
-type Ray = { origin:Point3D; direction:Vector3D }
-type Intersection = { normal:Vector3D; point:Point3D; ray:Ray; shape:Shape; t:float; color:Color }
+type Ray = { origin:Vector3D; direction:Vector3D }
+type Intersection = { normal:Vector3D; point:Vector3D; ray:Ray; shape:Shape; t:float; color:Color }
+type LightSample = { point:Vector3D; color:Color; normal:Vector3D }
+
+let mutable randomDouble = Random()
 
 let norm (v:Vector3D) =
     let abs = sqrt (v.X * v.X + v.Y * v.Y + v.Z * v.Z)
@@ -56,6 +59,25 @@ let cramers a b c ray =
 let pointAtTime ray time =
     ray.origin + time * ray.direction
 
+let pointOnSphere (rand:Random)=
+    let phi = rand.NextDouble() * 2.0 * Math.PI
+    let theta = rand.NextDouble() * Math.PI
+    Vector3D((Math.Cos phi) * (Math.Sin theta), (Math.Sin phi) * (Math.Cos theta), Math.Cos theta)
+
+let getSampleFromShape shape (rand:Random) = 
+    match shape with
+        | Sphere (center, radius, diffuseColor) ->
+            let randPoint = pointOnSphere rand
+            let point = radius * randPoint + center;
+            { point = point; color = diffuseColor; normal=randPoint }
+        | Triangle(a,b,c,v1,v2,v3,color) ->
+            let alpha = rand.NextDouble()
+            let beta = rand.NextDouble()
+            let y = 1.0 - alpha - beta
+            let point = alpha * a + beta * b + y * c
+            { point = point; color = color; normal=alpha * v1 + beta * v2 + y * v3 }
+
+
 let intersection shape ray = 
     match shape with
         | Sphere (center, radius, diffuseColor) ->
@@ -76,19 +98,29 @@ let intersection shape ray =
             let p = pointAtTime ray t
             [ { normal = n; point = p; ray = ray; shape = shape; t = t; color=color } ]
 
-let colorAt intersections scene =
+let raytrace ray scene min max =
+    List.filter (fun x -> x.t > min && x.t < max) (List.collect (fun x -> x) (List.map (fun x -> intersection x ray) scene.shapes))
+
+let colorAt intersections scene rand =
     let closest = List.minBy(fun i -> i.t) intersections
-    let kd = closest.color
-    let Ia = scene.ambientLight
-    let L = norm (scene.light.position - closest.point)
-    let Id = Math.Max(0.0, Vector3D.DotProduct(L, closest.normal))
-    let V = scene.camera.position - closest.point
-    let H = norm (L + V)
-    let Is = Math.Pow(Math.Max(0.0, Vector3D.DotProduct(H,closest.normal)), 500.0)
-    let ambient = kd * Ia
-    let diffuse = kd * Id
-    let specular = Color(1.0,1.0,1.0) * Is
-    ambient + diffuse + specular
+    let sample = getSampleFromShape scene.light.shape rand
+    let toLight = sample.point - closest.point
+    let L = norm toLight
+    let tmin = 0.01
+    let tmax = toLight.Length
+    let shadowray = { origin = closest.point; direction = L }
+    if (raytrace shadowray scene tmin tmax).Length > 0 then closest.color * scene.ambientLight
+    else 
+        let kd = closest.color
+        let Ia = scene.ambientLight
+        let Id = Math.Max(0.0, Vector3D.DotProduct(L, closest.normal))
+        let V = scene.camera.position - closest.point
+        let H = norm (L + V)
+        let Is = Math.Pow(Math.Max(0.0, Vector3D.DotProduct(H,closest.normal)), 500.0)
+        let ambient = kd * Ia
+        let diffuse = kd * Id * sample.color
+        let specular = Color(1.0,1.0,1.0) * Is
+        ambient + diffuse + specular
 
 do
     let width = 480
@@ -106,14 +138,17 @@ do
     let bmp = new Bitmap(width, height)
 
     // Sphere
-    let sphere = Sphere(Point3D(1.0, 1.0, 1.0), 0.4, Color(1.0, 0.1, 0.1))
+    let sphere = Sphere(Vector3D(2.0, 1.0, 0.8), 0.2, Color(1.0, 0.1, 0.1))
+    let sphere2 = Sphere(Vector3D(1.0, 1.0, 1.0), 0.4, Color(0.1, 1.0, 0.1))
+    let sphere3 = Sphere(Vector3D(1.0, 1.0, 100.0), 98.0, Color(0.1, 1.0, 0.1))
 
     // Camera
-    let camera = { position = Point3D(0.0, 0.0, 0.0); lookAt = Point3D(1.0, 1.0, 1.0); lookUp = Vector3D(0.0, 1.0, 0.0) }
+    let camera = { position = Vector3D(-5.0, 0.0, 0.0); lookAt = Vector3D(1.0, 1.0, 1.0); lookUp = Vector3D(0.0, 1.0, 0.0) }
 
     // Scene
-    let light = { position=Point3D(0.0,0.0,-5.0); color=Color(0.8,0.8,0.8) }
-    let scene = { camera = camera; shapes = [sphere]; ambientLight = Color(0.2, 0.2, 0.2); light = light }
+    let sun = Sphere(Vector3D(0.0,0.0,-5.0), 0.5, diffuseColor=Color(0.2,0.2,1.0))
+    let light : Light = { shape=sun; color=Color(0.8,0.8,0.8) }
+    let scene = { camera = camera; shapes = [sphere; sphere2; sphere3]; ambientLight = Color(0.2, 0.2, 0.2); light = light }
 
     // Set up the coordinate system
     let n = norm (camera.position - camera.lookAt)
@@ -121,15 +156,17 @@ do
     let v = norm (Vector3D.CrossProduct(n, u))
     let vpc = camera.position - n
 
+    let rand = Random()
+
     for x in 0..(width - 1) do
         for y in 0..(height - 1) do 
             let rayPoint = vpc + float(x-width/2)*pw*u + float(y-height/2)*ph*v
             let rayDir = norm (rayPoint - scene.camera.position)
             let ray = { origin = scene.camera.position; direction = rayDir }
-            let intersects = List.collect (fun x -> x) (List.map (fun x -> intersection x ray) scene.shapes)
+            let intersects = raytrace ray scene 0.01 100.0
             match intersects with
             | [] -> bmp.SetPixel(x, y, Color.Gray)
-            | _ -> let color = colorAt intersects scene
+            | _ -> let color = colorAt intersects scene rand
                    bmp.SetPixel(x,y, Color.FromArgb(255, (int)(color.r*255.0), (int)(color.g*255.0), (int)(color.b*255.0)))
 
     bmp.Save(@"c:\users\mfh\desktop\output1.jpg")
