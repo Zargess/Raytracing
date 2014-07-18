@@ -167,7 +167,9 @@ do
         for y in 0..(height - 1) do
             let colors = seq { 
                             for i in 0..15 do
-                                let rayPoint = vpc + float(x-width/2)*pw*u + float(y-height/2)*ph*v
+                                let dx = rand.NextDouble() - 0.5
+                                let dy = rand.NextDouble() - 0.5
+                                let rayPoint = vpc + (dx + float(x-width/2))*pw*u + (dy + float(y-height/2))*ph*v
                                 let rayDir = norm (rayPoint - scene.camera.position)
                                 let ray = { origin = scene.camera.position; direction = rayDir }
                                 let intersects = raytrace ray scene 0.01 100.0
