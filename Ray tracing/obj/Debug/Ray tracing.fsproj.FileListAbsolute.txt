@@ -1,0 +1,9 @@
+c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\bin\Debug\Ray_tracing.exe.config
+c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\bin\Debug\Ray_tracing.XML
+c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\bin\Debug\Ray_tracing.exe
+c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\bin\Debug\Ray_tracing.pdb
+c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\bin\Debug\FSharp.Core.dll
+c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\bin\Debug\FSharp.Core.xml
+c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\obj\Debug\Ray tracing.fsprojResolveAssemblyReference.cache
+c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\obj\Debug\Ray_tracing.exe
+c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\obj\Debug\Ray_tracing.pdb
