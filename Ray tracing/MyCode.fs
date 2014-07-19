@@ -77,7 +77,10 @@ do
     let pw = 2.0 * Math.Tan(float(hfov / 2.0)) / float(width)
     let ph = 2.0 * Math.Tan(float(vfov / 2.0)) / float(height)
 
+    // GUI
+    let mainForm = new Form(Width = width, Height = height, Text = "FRay")
     let box = new PictureBox(BackColor = Color.White, Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.CenterImage)
+    mainForm.Controls.Add(box)
     let bmp = new Bitmap(width, height)
 
     // Sphere
@@ -108,3 +111,5 @@ do
                    bmp.SetPixel(x,y, Color.FromArgb(255, (int)(color.r*255.0), (int)(color.g*255.0), (int)(color.b*255.0)))
 
     bmp.Save(@"c:\users\mfh\desktop\output1.jpg")
+
+    Application.Run(mainForm)
