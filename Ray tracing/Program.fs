@@ -37,8 +37,6 @@ type Ray = { origin:Vector3D; direction:Vector3D }
 type Intersection = { normal:Vector3D; point:Vector3D; ray:Ray; shape:Shape; t:float; color:Color }
 type LightSample = { point:Vector3D; color:Color; normal:Vector3D }
 
-let mutable randomDouble = Random()
-
 let norm (v:Vector3D) =
     let abs = sqrt (v.X * v.X + v.Y * v.Y + v.Z * v.Z)
     v / abs
@@ -139,7 +137,10 @@ do
     let pw = 2.0 * Math.Tan(float(hfov / 2.0)) / float(width)
     let ph = 2.0 * Math.Tan(float(vfov / 2.0)) / float(height)
 
+    // Setting up the UI components
+    let mainForm = new Form(Width = width, Height = height, Text = "FRay")
     let box = new PictureBox(BackColor = Color.White, Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.CenterImage)
+    mainForm.Controls.Add(box)
     let bmp = new Bitmap(width, height)
 
     // Sphere
@@ -181,3 +182,5 @@ do
             bmp.SetPixel(x,y, Color.FromArgb(255, (int)(color.r*255.0), (int)(color.g*255.0), (int)(color.b*255.0)))
 
     bmp.Save(@"c:\users\mfh\desktop\output1.jpg")
+    box.Image <- (bmp :> Image)
+    Application.Run(mainForm)
