@@ -1,8 +1,4 @@
-﻿
-// Learn more about F# at http://fsharp.net
-// See the 'F# Tutorial' project for more help.
-
-open System
+﻿open System
 open System.Drawing
 open System.Windows.Forms
 open System.Windows.Media.Media3D
@@ -26,6 +22,7 @@ type Color(r: float, g: float, b: float) =
         let g1 = min 1.0 g
         let b1 = min 1.0 b
         Color(r1,g1,b1)
+
 
 type Shape =
     | Sphere  of center:Vector3D * radius:float * diffuseColor:Color
@@ -69,6 +66,40 @@ let pointOnSphere (rand:Random)=
     let theta = rand.NextDouble() * Math.PI
     Vector3D((Math.Cos phi) * (Math.Sin theta), (Math.Sin phi) * (Math.Cos theta), Math.Cos theta)
 
+let weightedDirection (rand:Random) = 
+    let u1 = rand.NextDouble()
+    let u2 = rand.NextDouble()
+    let theta = Math.Acos(sqrt(u1))
+    let phi = 2.0 * Math.PI * u2
+    Vector3D((Math.Cos phi) * (Math.Sin theta), (Math.Sin phi) * (Math.Cos theta), Math.Cos theta)
+
+let perpendicular (vec : Vector3D) =
+    let ax = Math.Abs vec.X
+    let ay = Math.Abs vec.Y
+    let az = Math.Abs vec.Z
+
+    let uyx = (ax-ay) < 0.0
+    let uzx = (ax - az) < 0.0
+    let uzy = (ay - az) < 0.0
+
+    let xm = uyx && uzx
+    let ym = (true<>xm) && uzy
+    let zm = true<>(xm && ym)
+
+    let tx = if xm then 1.0 else 0.0
+    let ty = if ym then 1.0 else 0.0
+    let tz = if zm then 1.0 else 0.0
+
+    Vector3D.CrossProduct(vec, Vector3D(tx,ty,tz))
+
+let generateWeightedDirection (rand:Random) (norm:Vector3D) =
+    let vec = weightedDirection rand
+    let u = perpendicular norm
+    let v = Vector3D.CrossProduct(vec,u)
+    let res = u*vec.X + v*vec.Y + vec.Z*norm
+    let q = res.Normalize()
+    res
+
 let getSampleFromShape shape (rand:Random) = 
     match shape with
         | Sphere (center, radius, diffuseColor) ->
@@ -106,108 +137,85 @@ let intersection shape ray =
 let raytrace ray (scene : Scene) min max =
     List.filter (fun x -> x.t > min && x.t < max) (List.collect (fun x -> x) (List.map (fun x -> intersection x ray) scene.shapes))
 
+let intersect2 ray (list:list<Shape>) min max = 
+    List.filter (fun x -> x.t > min && x.t < max) (List.collect (fun x -> x) (List.map (fun x -> intersection x ray) list))
+
 let getArea shape =
     match shape with
         | Sphere(center, radius, diffuseColor) ->
             4.0 * Math.PI * radius * radius
         | Triangle(a,b,c,v1,v2,v3,color) ->
             Vector3D.CrossProduct(v1, v2).Length / 2.0
-// lav recursiv
-let computeLightIntervals (lights : list<Light>) = 
-    let mutable lastEnd = 0.0
+
+let totalLightArea (lights:list<Light>) = 
     let areas = seq {
         for light in lights do
             yield getArea light.shape
     }
-    let areaTot = Seq.sum areas
-    let intervals = seq {
-        for light in lights do
-            let area = getArea light.shape
-            let percent = (area / areaTot) * 100.0
-            let first = lastEnd + 1.0
-            let last = lastEnd + percent
-            lastEnd <- last
-            yield { light = light; first = first; last = last }
-    }
-    intervals
+    Seq.sum areas
+
+let computeLightIntervals (lights : list<Light>) =
+    let areaTot = totalLightArea lights
+    let rec foo (lights : list<Light>) lastEnding listofintervals =
+        match lights with
+            | [] -> listofintervals
+            | car::cdr ->
+                let area = getArea car.shape
+                let percent = (area / areaTot) * 100.0
+                let first = lastEnding
+                let last = lastEnding + percent
+                let intervals = {light = car; first = first; last = last}::listofintervals
+                foo cdr last intervals
+    foo lights 0.0 []
 
 
 let getLight lightintervals (rand : Random) =
     let random = rand.NextDouble() * 100.0
     Seq.find (fun x -> x.first <= random && x.last >= random) lightintervals
 
-let colorAt intersections (scene : Scene) rand (lightintervals : seq<LightInterval>) =
-    let closest = List.minBy(fun i -> i.t) intersections
+let directLighting (intersection : Intersection) (scene : Scene) rand (lightintervals : seq<LightInterval>) = 
     let light = (getLight lightintervals rand).light
     let sample = getSampleFromShape light.shape rand
-    let toLight = sample.point - closest.point
+    let toLight = sample.point - intersection.point
     let L = norm toLight
     let tmin = 0.01
     let tmax = toLight.Length
-    let shadowray = { origin = closest.point; direction = L }
-    if (raytrace shadowray scene tmin tmax).Length > 0 then closest.color * scene.ambientLight
+    let shadowray = { origin = intersection.point; direction = L }
+    if (raytrace shadowray scene tmin tmax).Length > 0 then Color.Zero
+    else
+        let areatot = totalLightArea scene.lights
+        let kd = intersection.color * (1.0 / Math.PI)
+        let g1 = Vector3D.DotProduct(sample.normal,-L)
+        let g2 = Vector3D.DotProduct(intersection.normal, L)
+        let G = Math.Abs(g1 * g2 / toLight.LengthSquared)
+        kd * G * light.color * areatot
+
+let rec shade (ray : Ray) (scene:Scene) (rand:Random) (counter:int) (lightintervals : seq<LightInterval>) : Color=
+    let lightInter = intersect2 ray (List.map ( fun (x:Light) -> x.shape) scene.lights) 0.1 100.0
+    let shapeInter = intersect2 ray scene.shapes 0.1 100.0
+    let lightshade = (fun (inter:Intersection) -> if counter = 0 then inter.color else Color.Zero)
+    let shapeshade = (fun (inter:Intersection) -> 
+                        if counter >= 4 then Color.Zero 
+                        else 
+                           let direct = directLighting inter scene rand lightintervals
+                           let directionwd = generateWeightedDirection rand inter.normal
+                           let r = { origin = inter.point; direction = directionwd }
+                           let shades = shade r scene rand (counter+1) lightintervals
+                           direct + shades * (inter.color * (1.0 / Math.PI)))     
+    if lightInter.Length = 0 && shapeInter.Length = 0 then Color(0.0,0.0,0.0)
     else 
-        let kd = closest.color
-        let Ia = scene.ambientLight
-        let Id = Math.Max(0.0, Vector3D.DotProduct(L, closest.normal))
-        let V = scene.camera.position - closest.point
-        let H = norm (L + V)
-        let Is = Math.Pow(Math.Max(0.0, Vector3D.DotProduct(H,closest.normal)), 500.0)
-        let ambient = kd * Ia
-        let diffuse = kd * Id * sample.color
-        let specular = Color(1.0,1.0,1.0) * Is
-        ambient + diffuse + specular
-
-type RenderForm(width : int, height : int, scene : Scene, rand : Random, vpc : Vector3D, pw : float, ph : float, u : Vector3D, v : Vector3D, intervals : seq<LightInterval>) as form =
-        inherit Form()
-        let mutable x = 0
-        let mutable y = 0
-        let mutable Done = false
-        let bmp = new Bitmap(width, height)
-        do 
-            form.InitializeForm
-
-
-        member this.InitializeForm =
-            this.Text <- "FRay"
-            this.Width <- 480
-            this.Height <- 320
-
-        override form.OnPaint e =
-            let g = e.Graphics
-            if not Done then
-                let colors = seq { 
-                      for i in 0..15 do
-                        let dx = rand.NextDouble() - 0.5
-                        let dy = rand.NextDouble() - 0.5
-                        let rayPoint = vpc + (dx + float(x-form.Width/2))*pw*u + (dy + float(y-form.Height/2))*ph*v
-                        let rayDir = norm (rayPoint - scene.camera.position)
-                        let ray = { origin = scene.camera.position; direction = rayDir }
-                        let intersects = raytrace ray scene 0.01 100.0
-                        yield  match intersects with
-                               | [] -> Color.Zero
-                               | _ ->  colorAt intersects scene rand intervals                         
-                     }
-                let color = ((Seq.sum colors) * (1.0 / 16.0)).clip
-                bmp.SetPixel(x,y, Color.FromArgb(255, (int)(color.r*255.0), (int)(color.g*255.0), (int)(color.b*255.0)))
-            
-                y <- y + 1
-                if y = height then 
-                    y <- 0
-                    x <- x + 1
-                    let img = bmp :> Image
-                    g.DrawImage(img, new Point(0,0))
-
-                if x = width then
-                    Done <- true
-                    bmp.Save(@"c:\users\mfh\desktop\output1.jpg")
-                else
-                    form.Invalidate()
+        if lightInter.Length > 0 && shapeInter.Length = 0 then lightshade (List.minBy (fun x -> x.t) lightInter)
+        else
+            if lightInter.Length = 0 && shapeInter.Length > 0 then shapeshade (List.minBy (fun x -> x.t) shapeInter)
+            else 
+                let lightmin = List.minBy (fun x -> x.t) lightInter
+                let shapemin = List.minBy (fun x -> x.t) shapeInter
+                if lightmin.t < shapemin.t then lightshade lightmin else shapeshade shapemin
 
 do
-    let width = 480
-    let height = 320
-
+    let width = 512
+    let height = 512
+    let samples = 10.0
     // Vertical and horiontal field of view:
     let hfov = Math.PI/3.5
     let vfov = hfov * float(height) / float(width)
@@ -223,17 +231,20 @@ do
     let bmp = new Bitmap(width, height)
 
     // Sphere
-    let sphere = Sphere(Vector3D(2.0, 1.0, 0.8), 0.2, Color(1.0, 0.1, 0.1))
-    let sphere2 = Sphere(Vector3D(1.0, 1.0, 1.0), 0.4, Color(0.1, 1.0, 0.1))
-    let sphere3 = Sphere(Vector3D(1.0, 1.0, 100.0), 98.0, Color(0.1, 1.0, 0.1))
+    let sphere = Sphere(Vector3D(2.0, 1.0, 0.8), 1.0, Color(1.0, 0.8, 0.8))
+    let sphere2 = Sphere(Vector3D(1.0, 1.0, 1.0), 0.4, Color(0.6, 1.0, 0.1))
+    let sphere3 = Sphere(Vector3D(1.0, 1.0, 100.0), 98.0, Color(0.5, 1.0, 0.1))
+    let sphere4 = Sphere(Vector3D(100.0, 1.0, 1.0), 97.0, Color(1.0, 1.0, 1.0))
 
     // Camera
-    let camera = { position = Vector3D(-5.0, 0.0, 0.0); lookAt = Vector3D(1.0, 1.0, 1.0); lookUp = Vector3D(0.0, 1.0, 0.0) }
+    let camera = { position = Vector3D(-50.0, 5.0, -2.0); lookAt = Vector3D(1.0, 1.0, 1.0); lookUp = Vector3D(0.0, 1.0, 0.0) }
 
     // Scene
-    let sun = Sphere(Vector3D(0.0,0.0,-5.0), 0.5, diffuseColor=Color(1.0,1.0,1.0))
-    let light : Light = { shape=sun; color=Color(0.8,0.8,0.8) }
-    let scene = { camera = camera; shapes = [sphere; sphere2; sphere3]; ambientLight = Color(0.2, 0.2, 0.2); lights = [light] }
+    let sun = Sphere(Vector3D(0.0,0.0,-5.0), 0.4, diffuseColor=Color(1.0,1.0,1.0))
+    let sun1 = Sphere(Vector3D(-3.5,1.0,-1.8), 1.0, diffuseColor=Color(1.0,1.0,1.0))
+    let light : Light = { shape=sun; color=Color(1.0,1.0,1.0) }
+    let light1 : Light = { shape=sun1; color=Color(1.0,1.0,1.0) }
+    let scene = { camera = camera; shapes = [sphere; sphere2; sphere3; sphere4]; ambientLight = Color(0.2, 0.2, 0.2); lights = [light; light1] }
 
     // Set up the coordinate system
     let n = norm (camera.position - camera.lookAt)
@@ -242,30 +253,23 @@ do
     let vpc = camera.position - n
 
     let rand = Random()
-
+    
     let intervals = computeLightIntervals scene.lights
-    //let mainForm = new RenderForm(width, height, scene, rand, vpc, pw, ph, u, v)
-//    Application.Run(mainForm)
-//    let box = new PictureBox(BackColor = Color.White, Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.CenterImage)
-//    mainForm.Controls.Add(box)
-//    box.Image <- (bmp :> Image)
 
     for x in 0..(width - 1) do
         for y in 0..(height - 1) do
             let colors = seq { 
-                            for i in 0..15 do
+                            for i in 1..int(samples) do
                                 let dx = rand.NextDouble() - 0.5
                                 let dy = rand.NextDouble() - 0.5
                                 let rayPoint = vpc + (dx + float(x-width/2))*pw*u + (dy + float(y-height/2))*ph*v
                                 let rayDir = norm (rayPoint - scene.camera.position)
                                 let ray = { origin = scene.camera.position; direction = rayDir }
-                                let intersects = raytrace ray scene 0.01 100.0
-                                yield  match intersects with
-                                    | [] -> Color.Zero
-                                    | _ ->  colorAt intersects scene rand intervals                       
+                                yield shade ray scene rand 0 intervals                      
                               }
-            let color = ((Seq.fold (fun a b -> a + b) Color.Zero colors) * (1.0 / 16.0)).clip
+            let color = ((Seq.fold (fun a b -> a + b) Color.Zero colors) * (1.0 / samples) * Math.PI).clip 
             bmp.SetPixel(x,y, Color.FromArgb(255, (int)(color.r*255.0), (int)(color.g*255.0), (int)(color.b*255.0)))
+        Console.WriteLine(string(x))
            
     box.Image <- (bmp :> Image)
 
