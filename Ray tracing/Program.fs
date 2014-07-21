@@ -171,10 +171,10 @@ let computeLightIntervals (lights : list<Light>) =
 
 let getLight lightintervals (rand : Random) =
     let random = rand.NextDouble() * 100.0
-    Seq.find (fun x -> x.first <= random && x.last >= random) lightintervals
+    (Seq.find (fun x -> x.first <= random && x.last >= random) lightintervals).light
 
 let directLighting (intersection : Intersection) (scene : Scene) rand (lightintervals : seq<LightInterval>) = 
-    let light = (getLight lightintervals rand).light
+    let light = getLight lightintervals rand
     let sample = getSampleFromShape light.shape rand
     let toLight = sample.point - intersection.point
     let L = norm toLight
@@ -212,6 +212,7 @@ let rec shade (ray : Ray) (scene:Scene) (rand:Random) (counter:int) (lightinterv
                 let shapemin = List.minBy (fun x -> x.t) shapeInter
                 if lightmin.t < shapemin.t then lightshade lightmin else shapeshade shapemin
 
+[<STAThread>]
 do
     let width = 512
     let height = 512
@@ -237,7 +238,7 @@ do
     let sphere4 = Sphere(Vector3D(100.0, 1.0, 1.0), 97.0, Color(1.0, 1.0, 1.0))
 
     // Camera
-    let camera = { position = Vector3D(-50.0, 5.0, -2.0); lookAt = Vector3D(1.0, 1.0, 1.0); lookUp = Vector3D(0.0, 1.0, 0.0) }
+    let camera = { position = Vector3D(-4.0, 5.0, -2.0); lookAt = Vector3D(1.0, 1.0, 1.0); lookUp = Vector3D(0.0, 1.0, 0.0) }
 
     // Scene
     let sun = Sphere(Vector3D(0.0,0.0,-5.0), 0.4, diffuseColor=Color(1.0,1.0,1.0))
@@ -255,7 +256,9 @@ do
     let rand = Random()
     
     let intervals = computeLightIntervals scene.lights
+    let stopwatch = new Diagnostics.Stopwatch()
 
+    stopwatch.Start()
     for x in 0..(width - 1) do
         for y in 0..(height - 1) do
             let colors = seq { 
@@ -270,9 +273,11 @@ do
             let color = ((Seq.fold (fun a b -> a + b) Color.Zero colors) * (1.0 / samples) * Math.PI).clip 
             bmp.SetPixel(x,y, Color.FromArgb(255, (int)(color.r*255.0), (int)(color.g*255.0), (int)(color.b*255.0)))
         Console.WriteLine(string(x))
+    stopwatch.Stop()
+
+    Console.WriteLine("Time to build bitmap: {0:####}.{1:##} sec", stopwatch.Elapsed.Seconds, stopwatch.Elapsed.Milliseconds)
            
     box.Image <- (bmp :> Image)
 
     bmp.Save(@"c:\users\mfh\desktop\output1.jpg")
-    Console.WriteLine("Done")
     Application.Run(mainForm)
