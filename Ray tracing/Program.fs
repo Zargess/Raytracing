@@ -202,13 +202,12 @@ let rec shade (ray : Ray) (scene:Scene) (rand:Random) (counter:int) (lightinterv
                            let r = { origin = inter.point; direction = directionwd }
                            let shades = shade r scene rand (counter+1) lightintervals
                            direct + shades * (inter.color * (1.0 / Math.PI)))     
-    if lightInter.Length = 0 && shapeInter.Length = 0 then Color(0.0,0.0,0.0)
-    else 
-        if lightInter.Length > 0 && shapeInter.Length = 0 then lightshade (List.minBy (fun x -> x.t) lightInter)
-        else
-            if lightInter.Length = 0 && shapeInter.Length > 0 then shapeshade (List.minBy (fun x -> x.t) shapeInter)
-            else 
-                let lightmin = List.minBy (fun x -> x.t) lightInter
+    
+    match (lightInter.Length, shapeInter.Length) with
+    | (0,0) -> Color(0.0,0.0,0.0)
+    | (x,0) when x > 0 -> lightshade (List.minBy (fun x -> x.t) lightInter)
+    | (0,y) when y > 0 -> shapeshade (List.minBy (fun x -> x.t) shapeInter)
+    | (_,_) ->  let lightmin = List.minBy (fun x -> x.t) lightInter
                 let shapemin = List.minBy (fun x -> x.t) shapeInter
                 if lightmin.t < shapemin.t then lightshade lightmin else shapeshade shapemin
 
