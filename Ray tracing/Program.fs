@@ -16,6 +16,11 @@ type Color(r: float, g: float, b: float) =
         let g = c1.g + c2.g
         let b = c1.b + c2.b
         Color(r,g,b)
+    static member ( / ) (c: Color, s : float) =
+        let r = c.r / s
+        let g = c.g / s
+        let b = c.b / s
+        Color(r,g,b)
     static member Zero = Color(0.0, 0.0, 0.0)
      member this.clip = 
         let r1 = min 1.0 r
@@ -184,7 +189,7 @@ let directLighting (intersection : Intersection) (scene : Scene) rand (lightinte
     if (raytrace shadowray scene tmin tmax).Length > 0 then Color.Zero
     else
         let areatot = totalLightArea scene.lights
-        let kd = intersection.color * (1.0 / Math.PI)
+        let kd = intersection.color / Math.PI
         let g1 = Vector3D.DotProduct(sample.normal,-L)
         let g2 = Vector3D.DotProduct(intersection.normal, L)
         let G = Math.Abs(g1 * g2 / toLight.LengthSquared)
@@ -201,15 +206,15 @@ let rec shade (ray : Ray) (scene:Scene) (rand:Random) (counter:int) (lightinterv
                            let directionwd = generateWeightedDirection rand inter.normal
                            let r = { origin = inter.point; direction = directionwd }
                            let shades = shade r scene rand (counter+1) lightintervals
-                           direct + shades * (inter.color * (1.0 / Math.PI)))     
+                           direct + shades * (inter.color / Math.PI))     
     
     match (lightInter.Length, shapeInter.Length) with
-    | (0,0) -> Color(0.0,0.0,0.0)
     | (x,0) when x > 0 -> lightshade (List.minBy (fun x -> x.t) lightInter)
     | (0,y) when y > 0 -> shapeshade (List.minBy (fun x -> x.t) shapeInter)
-    | (_,_) ->  let lightmin = List.minBy (fun x -> x.t) lightInter
-                let shapemin = List.minBy (fun x -> x.t) shapeInter
-                if lightmin.t < shapemin.t then lightshade lightmin else shapeshade shapemin
+    | (x,y) when x > 0 && y > 0 ->  let lightmin = List.minBy (fun x -> x.t) lightInter
+                                    let shapemin = List.minBy (fun x -> x.t) shapeInter
+                                    if lightmin.t < shapemin.t then lightshade lightmin else shapeshade shapemin
+    | (_,_) -> Color(0.0,0.0,0.0)
 
 [<STAThread>]
 do
