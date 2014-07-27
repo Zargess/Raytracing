@@ -28,10 +28,10 @@ type Color(r: float, g: float, b: float) =
         let b1 = min 1.0 b
         Color(r1,g1,b1)
 
-
+type Material = { reflectivity:float; diffuseColor:Color; specularColor:Color }
 type Shape =
-    | Sphere  of center:Vector3D * radius:float * diffuseColor:Color
-    | Triangle of a:Vector3D * b:Vector3D * c:Vector3D * v1:Vector3D * v2:Vector3D * v3:Vector3D * diffuseColor:Color
+    | Sphere  of center:Vector3D * radius:float * material:Material
+    | Triangle of a:Vector3D * b:Vector3D * c:Vector3D * v1:Vector3D * v2:Vector3D * v3:Vector3D * material:Material
 type Light = { shape:Shape; color:Color }
 type Camera = { position:Vector3D; lookAt:Vector3D; lookUp:Vector3D }
 type Scene = { camera:Camera; shapes:list<Shape>; ambientLight:Color; lights:list<Light> }
@@ -107,21 +107,23 @@ let generateWeightedDirection (rand:Random) (norm:Vector3D) =
 
 let getSampleFromShape shape (rand:Random) = 
     match shape with
-        | Sphere (center, radius, diffuseColor) ->
+        | Sphere (center, radius, material) ->
             let randPoint = pointOnSphere rand
             let point = radius * randPoint + center;
-            { point = point; color = diffuseColor; normal=randPoint }
-        | Triangle(a,b,c,v1,v2,v3,color) ->
+            let color = material.diffuseColor
+            { point = point; color = color; normal=randPoint }
+        | Triangle(a,b,c,v1,v2,v3,material) ->
             let alpha = rand.NextDouble()
             let beta = rand.NextDouble()
             let y = 1.0 - alpha - beta
             let point = alpha * a + beta * b + y * c
+            let color = material.diffuseColor
             { point = point; color = color; normal=alpha * v1 + beta * v2 + y * v3 }
 
 
 let intersection shape ray = 
     match shape with
-        | Sphere (center, radius, diffuseColor) ->
+        | Sphere (center, radius, material) ->
             let s = ray.origin - center
             let rayDir = norm ray.direction
             let sv = Vector3D.DotProduct(s, rayDir)
@@ -131,13 +133,13 @@ let intersection shape ray =
             else
                 let normalAtTime t = norm ((pointAtTime ray t) - center)
                 let (t1,t2) = (-sv + sqrt(discr), -sv - sqrt(discr))
-                [ { normal = normalAtTime t1; point = pointAtTime ray t1; ray = ray; shape=shape; t = t1; color=diffuseColor };
-                  { normal = normalAtTime t2; point = pointAtTime ray t2; ray = ray; shape=shape; t = t2; color=diffuseColor } ]
-        | Triangle(a,b,c,v1,v2,v3,color) ->
+                [ { normal = normalAtTime t1; point = pointAtTime ray t1; ray = ray; shape=shape; t = t1; color=material.diffuseColor };
+                  { normal = normalAtTime t2; point = pointAtTime ray t2; ray = ray; shape=shape; t = t2; color=material.diffuseColor } ]
+        | Triangle(a,b,c,v1,v2,v3,material) ->
             let (alpha,beta,y,t) = cramers a b c ray
             let n = alpha * v1 + beta * v2 + y * v3
             let p = pointAtTime ray t
-            [ { normal = n; point = p; ray = ray; shape = shape; t = t; color=color } ]
+            [ { normal = n; point = p; ray = ray; shape = shape; t = t; color=material.diffuseColor } ]
 
 let raytrace ray (scene : Scene) min max =
     List.filter (fun x -> x.t > min && x.t < max) (List.collect (fun x -> x) (List.map (fun x -> intersection x ray) scene.shapes))
@@ -195,6 +197,11 @@ let directLighting (intersection : Intersection) (scene : Scene) rand (lightinte
         let G = Math.Abs(g1 * g2 / toLight.LengthSquared)
         kd * G * light.color * areatot
 
+let getReflectedRay ray (inter:Intersection) = 
+    let cl = - Vector3D.DotProduct(inter.normal, ray.direction)
+    let Rl = ray.direction + (2.0 * inter.normal * cl)
+    { origin=inter.point; direction=Rl }
+
 let rec shade (ray : Ray) (scene:Scene) (rand:Random) (counter:int) (lightintervals : seq<LightInterval>) : Color=
     let lightInter = intersect2 ray (List.map ( fun (x:Light) -> x.shape) scene.lights) 0.1 100.0
     let shapeInter = intersect2 ray scene.shapes 0.1 100.0
@@ -202,11 +209,12 @@ let rec shade (ray : Ray) (scene:Scene) (rand:Random) (counter:int) (lightinterv
     let shapeshade = (fun (inter:Intersection) -> 
                         if counter >= 4 then Color.Zero 
                         else 
-                           let direct = directLighting inter scene rand lightintervals
+                           let direct = directLighting inter scene rand lightintervals * 0.8
                            let directionwd = generateWeightedDirection rand inter.normal
-                           let r = { origin = inter.point; direction = directionwd }
-                           let shades = shade r scene rand (counter+1) lightintervals
-                           direct + shades * (inter.color / Math.PI))     
+                           //let r = { origin = inter.point; direction = directionwd }
+                           let r = getReflectedRay ray inter
+                           let shades = (shade r scene rand (counter+1) lightintervals) * 0.2
+                           direct + shades * (inter.color / Math.PI))
     
     match (lightInter.Length, shapeInter.Length) with
     | (x,0) when x > 0 -> lightshade (List.minBy (fun x -> x.t) lightInter)
@@ -235,18 +243,24 @@ do
     mainForm.Controls.Add(box)
     let bmp = new Bitmap(width, height)
 
+    let material = { reflectivity=0.2; diffuseColor=Color(1.0, 0.8, 0.8); specularColor=Color(1.0, 0.8, 0.8) }
+    let material1 = { reflectivity=0.2; diffuseColor=Color(0.6, 1.0, 0.1); specularColor=Color(0.6, 1.0, 0.1) }
+    let material2 = { reflectivity=0.2; diffuseColor=Color(0.5, 1.0, 0.1); specularColor=Color(0.5, 1.0, 0.1) }
+    let material3 = { reflectivity=0.2; diffuseColor=Color(1.0, 1.0, 1.0); specularColor=Color(1.0, 1.0, 1.0) }
+    let lightmaterial = { reflectivity=0.2; diffuseColor=Color(1.0, 1.0, 1.0); specularColor=Color(1.0, 1.0, 1.0) }
+
     // Sphere
-    let sphere = Sphere(Vector3D(2.0, 1.0, 0.8), 1.0, Color(1.0, 0.8, 0.8))
-    let sphere2 = Sphere(Vector3D(1.0, 1.0, 1.0), 0.4, Color(0.6, 1.0, 0.1))
-    let sphere3 = Sphere(Vector3D(1.0, 1.0, 100.0), 98.0, Color(0.5, 1.0, 0.1))
-    let sphere4 = Sphere(Vector3D(100.0, 1.0, 1.0), 97.0, Color(1.0, 1.0, 1.0))
+    let sphere = Sphere(Vector3D(2.0, 1.0, 0.8), 1.0, material)
+    let sphere2 = Sphere(Vector3D(1.0, 1.0, 1.0), 0.4, material1)
+    let sphere3 = Sphere(Vector3D(1.0, 1.0, 100.0), 98.0, material2)
+    let sphere4 = Sphere(Vector3D(100.0, 1.0, 1.0), 97.0, material3)
 
     // Camera
     let camera = { position = Vector3D(-4.0, 5.0, -2.0); lookAt = Vector3D(1.0, 1.0, 1.0); lookUp = Vector3D(0.0, 1.0, 0.0) }
 
     // Scene
-    let sun = Sphere(Vector3D(0.0,0.0,-5.0), 0.4, diffuseColor=Color(1.0,1.0,1.0))
-    let sun1 = Sphere(Vector3D(-3.5,1.0,-1.8), 1.0, diffuseColor=Color(1.0,1.0,1.0))
+    let sun = Sphere(Vector3D(0.0,0.0,-5.0), 0.4, lightmaterial)
+    let sun1 = Sphere(Vector3D(-3.5,1.0,-1.8), 1.0, lightmaterial)
     let light : Light = { shape=sun; color=Color(1.0,1.0,1.0) }
     let light1 : Light = { shape=sun1; color=Color(1.0,1.0,1.0) }
     let scene = { camera = camera; shapes = [sphere; sphere2; sphere3; sphere4]; ambientLight = Color(0.2, 0.2, 0.2); lights = [light; light1] }
