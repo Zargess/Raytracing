@@ -236,7 +236,7 @@ let rec shade (ray : Ray) (scene:Scene) (rand:Random) (counter:int) (lightinterv
 do
     let width = 512
     let height = 512
-    let samples = 150.0
+    let samples = 1000.0
     // Vertical and horiontal field of view:
     let hfov = Math.PI/3.5
     let vfov = hfov * float(height) / float(width)

@@ -7,3 +7,12 @@ c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\bin\D
 c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\obj\Debug\Ray tracing.fsprojResolveAssemblyReference.cache
 c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\obj\Debug\Ray_tracing.exe
 c:\users\mfh\documents\visual studio 2013\Projects\Ray tracing\Ray tracing\obj\Debug\Ray_tracing.pdb
+C:\Users\MFH\Documents\GitHub\Raytracing\Ray tracing\bin\Debug\Ray_tracing.exe.config
+C:\Users\MFH\Documents\GitHub\Raytracing\Ray tracing\bin\Debug\Ray_tracing.XML
+C:\Users\MFH\Documents\GitHub\Raytracing\Ray tracing\bin\Debug\Ray_tracing.exe
+C:\Users\MFH\Documents\GitHub\Raytracing\Ray tracing\bin\Debug\Ray_tracing.pdb
+C:\Users\MFH\Documents\GitHub\Raytracing\Ray tracing\bin\Debug\FSharp.Core.dll
+C:\Users\MFH\Documents\GitHub\Raytracing\Ray tracing\bin\Debug\FSharp.Core.xml
+C:\Users\MFH\Documents\GitHub\Raytracing\Ray tracing\obj\Debug\Ray tracing.fsprojResolveAssemblyReference.cache
+C:\Users\MFH\Documents\GitHub\Raytracing\Ray tracing\obj\Debug\Ray_tracing.exe
+C:\Users\MFH\Documents\GitHub\Raytracing\Ray tracing\obj\Debug\Ray_tracing.pdb
