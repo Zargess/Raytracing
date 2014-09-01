@@ -232,11 +232,18 @@ let rec shade (ray : Ray) (scene:Scene) (rand:Random) (counter:int) (lightinterv
                                     if lightmin.t < shapemin.t then lightshade lightmin else shapeshade shapemin
     | (_,_) -> Color(0.0,0.0,0.0)
 
+let constructTriangle (A:Vector3D) (B:Vector3D) (C:Vector3D) material =
+    let b = Vector3D(A.X - C.X, A.Y - C.Y, A.Z - C.Z)
+    let c = Vector3D(A.X - B.X, A.Y - B.Y, A.Z - B.Z)
+    let bxc = Vector3D.CrossProduct(b,c)
+    Console.WriteLine(string(bxc.X) + "," + string(bxc.Y) + "," + string(bxc.Z))
+    Triangle(A,B,C,b,c,bxc, material)
+
 [<STAThread>]
 do
     let width = 512
     let height = 512
-    let samples = 150.0
+    let samples = 10.0
     // Vertical and horiontal field of view:
     let hfov = Math.PI/3.5
     let vfov = hfov * float(height) / float(width)
